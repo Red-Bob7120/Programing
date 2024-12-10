@@ -1,0 +1,82 @@
+import os
+import shutil
+import tkinter as tk
+from tkinter import filedialog, messagebox
+from PIL import Image
+
+def log(msg):
+    log_text.insert(tk.END, msg + "\n")
+    log_text.see(tk.END)
+
+def 작업_실행(entry1, entry2=None, func=None, extra=None):
+    dir1 = entry1.get().strip()
+    dir2 = entry2.get().strip() if entry2 else None
+    if not dir1 or (entry2 and not dir2):
+        messagebox.showerror("오류", "모든 입력을 채워주세요.")
+        return
+    func(dir1, dir2, extra) if extra else func(dir1, dir2)
+
+def 이름_변경(경로, 이름, _):
+    try:
+        for i, 파일 in enumerate([f for f in os.listdir(경로) if f.lower().endswith(('jpg', 'jpeg', 'png'))], 1):
+            확장자 = os.path.splitext(파일)[1]
+            새이름 = f"{이름}_{i:03}{확장자}"
+            os.rename(os.path.join(경로, 파일), os.path.join(경로, 새이름))
+            log(f"{파일} -> {새이름}")
+        messagebox.showinfo("완료", "이미지 이름 변경 완료!")
+    except Exception as e:
+        messagebox.showerror("오류", str(e))
+
+def 파일_이동(소스, 대상, _):
+    try:
+        if not os.path.exists(대상):
+            os.makedirs(대상)
+        for 파일 in os.listdir(소스):
+            shutil.move(os.path.join(소스, 파일), os.path.join(대상, 파일))
+            log(f"{파일} 이동 완료.")
+        messagebox.showinfo("완료", "파일 이동 완료!")
+    except Exception as e:
+        messagebox.showerror("오류", str(e))
+
+def 형식_변환(소스, 대상, 포맷):
+    try:
+        if not os.path.exists(대상):
+            os.makedirs(대상)
+        for 파일 in [f for f in os.listdir(소스) if f.lower().endswith(('jpg', 'jpeg', 'png'))]:
+            img = Image.open(os.path.join(소스, 파일))
+            새파일 = os.path.splitext(파일)[0] + f".{포맷}"
+            img.save(os.path.join(대상, 새파일), 포맷.upper())
+            log(f"{파일} -> {새파일} 변환 완료")
+        messagebox.showinfo("완료", "파일 변환 완료!")
+    except Exception as e:
+        messagebox.showerror("오류", str(e))
+
+def 디렉토리_선택(entry):
+    디렉토리 = filedialog.askdirectory()
+    if 디렉토리:
+        entry.delete(0, tk.END)
+        entry.insert(0, 디렉토리)
+        log(f"선택한 디렉토리: {디렉토리}")
+
+root = tk.Tk()
+root.title("파일 관리 도구")
+root.geometry("600x600")
+
+for 제목, 함수, 필요_입력, 추가 in [
+    ("1. 이미지 이름 변경", 이름_변경, True, None),
+    ("2. 파일 이동", 파일_이동, True, None),
+    ("3. 파일 형식 변환", 형식_변환, True, "png")
+]:
+    frame = tk.LabelFrame(root, text=제목, padx=10, pady=10)
+    frame.pack(fill="x", padx=10, pady=5)
+    entry1, entry2 = tk.Entry(frame, width=40), tk.Entry(frame, width=20 if 추가 else 40)
+    entry1.grid(row=0, column=1, padx=5, pady=5)
+    tk.Button(frame, text="찾기", command=lambda e=entry1: 디렉토리_선택(e)).grid(row=0, column=2, padx=5, pady=5)
+    tk.Label(frame, text="대상" if 필요_입력 else "옵션").grid(row=1, column=0, padx=5, pady=5)
+    entry2.grid(row=1, column=1, padx=5, pady=5)
+    tk.Button(frame, text="실행", command=lambda e1=entry1, e2=entry2, f=함수, x=추가: 작업_실행(e1, e2, f, x)).grid(row=1, column=2, padx=5, pady=5)
+
+log_text = tk.Text(root, height=10, wrap="word")
+log_text.pack(fill="both", padx=10, pady=10)
+
+root.mainloop()

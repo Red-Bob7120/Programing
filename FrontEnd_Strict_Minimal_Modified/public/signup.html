@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TripPlanner - 회원가입</title>
+    <link rel="stylesheet" href="css/signup.css">
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <h1><a href="index.html">여행 플래너</a></h1>
+            <div>
+                <a href="login.html">로그인</a>
+                <a href="signup.html">회원가입</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="signup-container">
+        <div class="signup-box">
+            <h1>회원가입</h1>
+            
+            <form id="signup-form" class="auth-form">
+                <div class="input-group">
+                    <input type="text" id="signup-name" placeholder="이름" required />
+                    <input type="email" id="signup-email" placeholder="이메일" required />
+                    <input type="password" id="signup-password" placeholder="비밀번호" required />
+                    <input type="password" id="signup-password-confirm" placeholder="비밀번호 확인" required />
+                </div>
+                <button type="submit">가입하기</button>
+            </form>
+
+            <p class="login-link">이미 계정이 있으신가요? <a href="login.html">로그인하기</a></p>
+        </div>
+    </div>
+
+    <script type="module" src="./js/firebase-config.js"></script>
+    <script type="module">
+        import { signupEmail } from './js/firebase-config.js';
+
+        document.getElementById('signup-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('signup-name').value;
+            const email = document.getElementById('signup-email').value;
+            const password = document.getElementById('signup-password').value;
+            const passwordConfirm = document.getElementById('signup-password-confirm').value;
+
+            if (password !== passwordConfirm) {
+                alert('비밀번호가 일치하지 않습니다.');
+                return;
+            }
+
+            try {
+                await signupEmail(email, password);
+                alert('회원가입에 성공했습니다!');
+                window.location.href = 'index.html';
+            } catch (err) {
+                alert('회원가입 실패: ' + err.message);
+            }
+        });
+    </script>
+</body>
+</html>
