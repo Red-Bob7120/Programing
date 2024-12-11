@@ -1,165 +1,110 @@
 import os
-from datetime import datetime
-from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QLabel, QPushButton, QLineEdit, QFileDialog, QMessageBox, QVBoxLayout, QWidget, QTextEdit, QComboBox, QCheckBox
-)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+import shutil
+import threading
+import tkinter as tk
+from tkinter import filedialog, messagebox, scrolledtext
 
+# 이미지 파일 복사 및 이름 변경 함수
+def copy_and_rename_files(source_folder, destination_folder, extensions, rename_pattern, log_widget):
+    if not os.path.exists(destination_folder):
+        os.makedirs(destination_folder)
 
-class RenameWorker(QThread):
-    progress = pyqtSignal(str)
+    copied_count = 0
+    for root, dirs, files in os.walk(source_folder):
+        for index, file in enumerate(files):
+            if file.lower().endswith(tuple(extensions)):
+                source_path = os.path.join(root, file)
+                album_name = os.path.basename(source_folder)
+                new_name = f"{rename_pattern}_{album_name}_{index + 1:06d}{os.path.splitext(file)[1]}" if rename_pattern else file
+                destination_path = os.path.join(destination_folder, new_name)
+                try:
+                    shutil.copy2(source_path, destination_path)
+                    log_widget.insert(tk.END, f"복사 완료: {file} -> {new_name}\n")
+                    log_widget.yview(tk.END)  # 스크롤 자동 이동
+                    copied_count += 1
+                except Exception as e:
+                    log_widget.insert(tk.END, f"복사 실패: {file} - {e}\n")
+                    log_widget.yview(tk.END)
 
-    def __init__(self, directory, pattern, target_format, remove_duplicates):
-        super().__init__()
-        self.directory = directory
-        self.pattern = pattern
-        self.target_format = target_format
-        self.remove_duplicates = remove_duplicates
+    log_widget.insert(tk.END, f"총 {copied_count}개의 파일이 복사되었습니다.\n")
+    log_widget.yview(tk.END)
 
-    def run(self):
-        try:
-            files = [
-                f for f in os.listdir(self.directory)
-                if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'))
-            ]
+# 소스 폴더 선택 함수
+def select_source_folder():
+    folder = filedialog.askdirectory()
+    if folder:
+        source_var.set(folder)
 
-            if not files:
-                self.progress.emit("선택된 디렉토리에 이미지 파일이 없습니다.")
-                return
+# 대상 폴더 선택 함수
+def select_destination_folder():
+    folder = filedialog.askdirectory()
+    if folder:
+        destination_var.set(folder)
 
-            if self.remove_duplicates:
-                files = self.remove_duplicate_files(files)
+# 복사 실행 함수
+def start_copy():
+    source_folder = source_var.get()
+    destination_folder = destination_var.get()
+    rename_pattern = rename_var.get()
+    extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp']
 
-            for i, file in enumerate(files):
-                old_path = os.path.join(self.directory, file)
-                creation_time = os.path.getctime(old_path)
-                creation_date = datetime.fromtimestamp(creation_time).strftime('%Y%m%d')
+    if not source_folder or not destination_folder:
+        messagebox.showerror("오류", "사진이 있는 폴더와 저장할 폴더를 선택해주세요!")
+        return
 
-                # 새로운 이름 생성
-                new_name = f"{self.pattern}_{creation_date}_{i:06d}"
-                ext = {
-                    "PNG": ".png",
-                    "JPG": ".jpg",
-                    "WEBP": ".webp"
-                }.get(self.target_format, os.path.splitext(file)[1])
-                new_name += ext
+    log_text.delete(1.0, tk.END)  # 로그 초기화
 
-                new_path = os.path.join(self.directory, new_name)
+    # 파일 복사를 별도의 스레드에서 실행
+    copy_thread = threading.Thread(target=copy_and_rename_files, args=(source_folder, destination_folder, extensions, rename_pattern, log_text))
+    copy_thread.start()
 
-                # 기존 파일 삭제 처리
-                if os.path.exists(new_path):
-                    os.remove(new_path)
-                    self.progress.emit(f"기존 파일 삭제: {new_name}")
+# GUI 생성
+app = tk.Tk()
+app.title("사진 복사 및 이름 변경")
+app.geometry("600x500")
 
-                os.rename(old_path, new_path)
-                self.progress.emit(f"{file} -> {new_name}")
+# 폴더 경로 변수
+source_var = tk.StringVar()
+destination_var = tk.StringVar()
+rename_var = tk.StringVar()
 
-            self.progress.emit("모든 파일의 이름 변경 작업이 완료되었습니다.")
+# 소스 폴더 선택 UI
+source_label = tk.Label(app, text="사진이 있는 폴더:")
+source_label.pack(anchor="w", padx=10, pady=5)
+source_frame = tk.Frame(app)
+source_frame.pack(fill="x", padx=10)
+source_entry = tk.Entry(source_frame, textvariable=source_var, width=50)
+source_entry.pack(side="left", fill="x", expand=True)
+source_button = tk.Button(source_frame, text="폴더 선택", command=select_source_folder)
+source_button.pack(side="right")
 
-        except Exception as e:
-            self.progress.emit(f"오류 발생: {str(e)}")
+# 대상 폴더 선택 UI
+destination_label = tk.Label(app, text="저장할 폴더:")
+destination_label.pack(anchor="w", padx=10, pady=5)
+destination_frame = tk.Frame(app)
+destination_frame.pack(fill="x", padx=10)
+destination_entry = tk.Entry(destination_frame, textvariable=destination_var, width=50)
+destination_entry.pack(side="left", fill="x", expand=True)
+destination_button = tk.Button(destination_frame, text="폴더 선택", command=select_destination_folder)
+destination_button.pack(side="right")
 
-    def remove_duplicate_files(self, files):
-        import hashlib
-        unique_files = {}
-        for file in files:
-            file_path = os.path.join(self.directory, file)
-            file_hash = self.get_file_hash(file_path)
-            if file_hash in unique_files:
-                os.remove(file_path)
-                self.progress.emit(f"중복 파일 삭제: {file}")
-            else:
-                unique_files[file_hash] = file
+# 파일 이름 변경 옵션 UI
+rename_label = tk.Label(app, text="새 파일 이름 (예: Photo):")
+rename_label.pack(anchor="w", padx=10, pady=5)
+rename_entry = tk.Entry(app, textvariable=rename_var, width=50)
+rename_entry.pack(fill="x", padx=10)
+rename_note = tk.Label(app, text="* 새 이름 뒤에 앨범 이름과 번호가 자동으로 붙습니다. 비워두면 원래 이름이 유지됩니다.", fg="gray")
+rename_note.pack(anchor="w", padx=10)
 
-        return list(unique_files.values())
+# 실행 버튼
+start_button = tk.Button(app, text="복사 및 저장 시작", command=start_copy, bg="lightblue")
+start_button.pack(pady=10)
 
-    @staticmethod
-    def get_file_hash(file_path):
-        import hashlib
-        hash_md5 = hashlib.md5()
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hash_md5.update(chunk)
-        return hash_md5.hexdigest()
+# 로그 출력 UI
+log_label = tk.Label(app, text="작업 로그:")
+log_label.pack(anchor="w", padx=10)
+log_text = scrolledtext.ScrolledText(app, wrap="word", height=15)
+log_text.pack(fill="both", padx=10, pady=5, expand=True)
 
-
-class PhotoRenamerApp(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("사진 이름 변경기")
-        self.setGeometry(100, 100, 800, 600)
-
-        self.init_ui()
-
-    def init_ui(self):
-        layout = QVBoxLayout()
-
-        self.dir_label = QLabel("선택된 디렉토리: 없음")
-        layout.addWidget(self.dir_label)
-
-        self.select_dir_button = QPushButton("디렉토리 선택")
-        self.select_dir_button.clicked.connect(self.select_directory)
-        layout.addWidget(self.select_dir_button)
-
-        self.pattern_label = QLabel("변경할 이름 패턴 입력 (예: 'photo'): ")
-        layout.addWidget(self.pattern_label)
-
-        self.pattern_input = QLineEdit()
-        layout.addWidget(self.pattern_input)
-
-        self.format_label = QLabel("변경할 파일 유형 선택: ")
-        layout.addWidget(self.format_label)
-
-        self.format_combo = QComboBox()
-        self.format_combo.addItems(["원본 유지", "PNG", "JPG", "WEBP"])
-        layout.addWidget(self.format_combo)
-
-        self.duplicate_checkbox = QCheckBox("중복 파일 제거")
-        layout.addWidget(self.duplicate_checkbox)
-
-        self.rename_button = QPushButton("사진 이름 변경")
-        self.rename_button.clicked.connect(self.start_rename)
-        layout.addWidget(self.rename_button)
-
-        self.log_output = QTextEdit()
-        self.log_output.setReadOnly(True)
-        layout.addWidget(self.log_output)
-
-        container = QWidget()
-        container.setLayout(layout)
-        self.setCentralWidget(container)
-
-    def select_directory(self):
-        directory = QFileDialog.getExistingDirectory(self, "디렉토리 선택")
-        if directory:
-            self.selected_directory = directory
-            self.dir_label.setText(f"선택된 디렉토리: {directory}")
-            self.log_output.append(f"디렉토리 선택: {directory}")
-
-    def start_rename(self):
-        directory = getattr(self, 'selected_directory', None)
-        if not directory:
-            QMessageBox.warning(self, "오류", "먼저 디렉토리를 선택하세요.")
-            return
-
-        pattern = self.pattern_input.text()
-        if not pattern:
-            QMessageBox.warning(self, "오류", "이름 패턴을 입력하세요.")
-            return
-
-        target_format = self.format_combo.currentText()
-        remove_duplicates = self.duplicate_checkbox.isChecked()
-
-        self.worker = RenameWorker(directory, pattern, target_format, remove_duplicates)
-        self.worker.progress.connect(self.update_log)
-        self.worker.start()
-
-    def update_log(self, message):
-        self.log_output.append(message)
-
-
-if __name__ == "__main__":
-    app = QApplication([])
-    window = PhotoRenamerApp()
-    window.show()
-    app.exec_()
+# 프로그램 실행
+app.mainloop()
